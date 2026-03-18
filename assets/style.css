@@ -1,0 +1,409 @@
+/* Asterisk — Sci-fi UI Stylesheet */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Rajdhani:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Root vars ───────────────────────────────────────────────────── */
+:root {
+  --p1:        #00aaff;
+  --p1-glow:   rgba(0,170,255,0.6);
+  --p1-dim:    rgba(0,170,255,0.15);
+  --p2:        #ff6a00;
+  --p2-glow:   rgba(255,106,0,0.6);
+  --p2-dim:    rgba(255,106,0,0.15);
+  --gold:      #f0c040;
+  --gold-glow: rgba(240,192,64,0.5);
+  --bg:        #06080f;
+  --card-bg:   #080c18;
+  --border:    rgba(255,255,255,0.08);
+  --text:      #d0dff5;
+  --muted:     rgba(255,255,255,0.3);
+  --font-head: 'Orbitron', monospace;
+  --font-body: 'Rajdhani', sans-serif;
+}
+
+/* ── Body ────────────────────────────────────────────────────────── */
+body {
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  font-family: var(--font-body);
+
+  /* starfield bg */
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(0,80,160,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 50%, rgba(160,60,0,0.10) 0%, transparent 60%);
+}
+
+/* ── Card ────────────────────────────────────────────────────────── */
+#card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card-bg);
+  border: 1px solid rgba(0,150,255,0.2);
+  border-radius: 16px;
+  padding: 0 1.25rem 1.5rem;
+  position: relative;
+  overflow: hidden;
+
+  /* inner glow */
+  box-shadow:
+    0 0 0 1px rgba(0,100,200,0.1),
+    inset 0 0 60px rgba(0,60,120,0.08);
+}
+
+/* subtle grid texture */
+#card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,150,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,150,255,0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  border-radius: 16px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+#header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 0 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.header-corner {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,150,255,0.4));
+}
+.header-corner.right {
+  background: linear-gradient(270deg, transparent, rgba(0,150,255,0.4));
+}
+
+#title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 1rem;
+}
+
+#game-title {
+  font-family: var(--font-head);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(0,170,255,0.7), 0 0 40px rgba(0,170,255,0.3);
+}
+
+.title-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--p1);
+  box-shadow: 0 0 6px var(--p1);
+}
+
+/* ── Player panels ───────────────────────────────────────────────── */
+#player-panels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 0 0.25rem;
+}
+
+.player-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+}
+.player-panel.right { align-items: flex-end; }
+
+.panel-label {
+  font-family: var(--font-head);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.panel-orb {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  transition: box-shadow 0.3s;
+}
+
+.p1-orb {
+  border: 2px solid var(--p1);
+  box-shadow: 0 0 12px var(--p1-glow), inset 0 0 8px rgba(0,170,255,0.1);
+  background: radial-gradient(circle at 35% 35%, rgba(0,150,255,0.25), rgba(0,60,120,0.5));
+}
+
+.p2-orb {
+  border: 2px solid var(--p2);
+  box-shadow: 0 0 12px var(--p2-glow), inset 0 0 8px rgba(255,106,0,0.1);
+  background: radial-gradient(circle at 35% 35%, rgba(255,120,0,0.25), rgba(120,40,0,0.5));
+}
+
+.orb-count {
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Active player highlight */
+.panel-orb.active-turn {
+  animation: pulse-orb 1.6s ease-in-out infinite;
+}
+@keyframes pulse-orb {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.06); }
+}
+.p1-orb.active-turn { box-shadow: 0 0 22px var(--p1-glow), 0 0 6px var(--p1), inset 0 0 10px rgba(0,170,255,0.2); }
+.p2-orb.active-turn { box-shadow: 0 0 22px var(--p2-glow), 0 0 6px var(--p2), inset 0 0 10px rgba(255,106,0,0.2); }
+
+/* ── Mode switcher ───────────────────────────────────────────────── */
+#mode-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+#mode-row button {
+  width: 52px;
+  padding: 5px 0;
+  font-family: var(--font-head);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+#mode-row button.active {
+  border-color: rgba(0,170,255,0.5);
+  background: rgba(0,170,255,0.12);
+  color: var(--p1);
+  text-shadow: 0 0 8px var(--p1);
+}
+#diff-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.diff-btn {
+  width: 52px;
+  padding: 4px 0;
+  font-family: var(--font-head);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.diff-btn.active {
+  border-color: rgba(0,170,255,0.4);
+  background: rgba(0,170,255,0.1);
+  color: var(--p1);
+}
+
+/* ── Board ───────────────────────────────────────────────────────── */
+#board-wrap {
+  position: relative;
+  width: 100%;
+}
+
+svg#board {
+  display: block;
+  width: 100%;
+}
+
+#confetti-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  display: none;
+}
+
+/* ── SVG: edges ──────────────────────────────────────────────────── */
+.edge-p1 {
+  stroke: var(--p1);
+  stroke-width: 2;
+  opacity: 0.35;
+  fill: none;
+}
+.edge-p2 {
+  stroke: var(--p2);
+  stroke-width: 2;
+  opacity: 0.35;
+  fill: none;
+}
+.edge-neutral {
+  stroke: rgba(255,255,255,0.12);
+  stroke-width: 1.5;
+  fill: none;
+}
+.edge-win {
+  stroke: var(--gold);
+  stroke-width: 3;
+  opacity: 1;
+  fill: none;
+  filter: drop-shadow(0 0 4px var(--gold));
+}
+
+/* ── SVG: node socket (ring behind piece) ────────────────────────── */
+.node-socket {
+  fill: rgba(6,8,15,0.8);
+  stroke: rgba(255,255,255,0.12);
+  stroke-width: 1;
+  pointer-events: none;
+}
+.node-socket-center {
+  fill: rgba(6,8,15,0.9);
+  stroke: rgba(255,255,255,0.2);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.node-valid-ring {
+  fill: rgba(240,192,64,0.06);
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
+}
+.node-banned-ring {
+  fill: rgba(220, 50, 50, 0.06);
+  stroke: #e03535;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px rgba(220,50,50,0.4));
+}
+.node-win-ring {
+  fill: rgba(240,192,64,0.12);
+  stroke: var(--gold);
+  stroke-width: 2.5;
+  pointer-events: none;
+  filter: drop-shadow(0 0 5px var(--gold-glow));
+}
+
+/* ── SVG: pieces ─────────────────────────────────────────────────── */
+.piece {
+  pointer-events: none;
+}
+
+/* Outer ring of piece */
+.piece-ring-p1 { fill: none; stroke: var(--p1); stroke-width: 2; }
+.piece-ring-p2 { fill: none; stroke: var(--p2); stroke-width: 2; }
+
+/* Inner fill */
+.piece-fill-p1 {
+  fill: radial-gradient;
+  /* actual fill set inline for gradient */
+}
+.piece-fill-p2 { }
+
+/* Selected pulse */
+.piece-selected-p1 { stroke: var(--gold) !important; stroke-width: 2.5 !important; filter: drop-shadow(0 0 6px var(--gold)); }
+.piece-selected-p2 { stroke: var(--gold) !important; stroke-width: 2.5 !important; filter: drop-shadow(0 0 6px var(--gold)); }
+
+/* Win glow */
+.piece-win { filter: drop-shadow(0 0 8px var(--gold)); }
+
+.node-hit {
+  fill: transparent;
+  stroke: none;
+  cursor: pointer;
+}
+
+.node-label {
+  font-family: var(--font-head);
+  font-size: 9px;
+  fill: rgba(255,255,255,0.2);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────── */
+#status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 1rem;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  position: relative;
+}
+
+/* angled cuts on the sides */
+#status-bar::before,
+#status-bar::after {
+  content: '';
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  width: 8px; height: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 2px;
+  background: var(--card-bg);
+}
+#status-bar::before { left: -5px; }
+#status-bar::after  { right: -5px; }
+
+#status-text {
+  font-family: var(--font-head);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--text);
+  text-shadow: 0 0 10px rgba(0,170,255,0.4);
+}
+#status-text.p1-turn { color: var(--p1); text-shadow: 0 0 12px var(--p1-glow); }
+#status-text.p2-turn { color: var(--p2); text-shadow: 0 0 12px var(--p2-glow); }
+#status-text.win-text { color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+
+.status-dash { color: rgba(255,255,255,0.2); font-size: 14px; }
+
+/* ── New game button ─────────────────────────────────────────────── */
+#btn-row { margin-top: 0.75rem; }
+
+#btn-new-game {
+  width: 100%;
+  padding: 10px;
+  font-family: var(--font-head);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  border-radius: 8px;
+  border: 1px solid rgba(0,170,255,0.25);
+  background: rgba(0,170,255,0.07);
+  color: rgba(0,170,255,0.8);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+#btn-new-game:hover {
+  background: rgba(0,170,255,0.14);
+  border-color: rgba(0,170,255,0.5);
+  color: var(--p1);
+  box-shadow: 0 0 12px rgba(0,170,255,0.15);
+}
+
