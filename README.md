@@ -1,196 +1,102 @@
 # Asterisk
 
-A two-player strategy board game. Slide your three pieces along the network
-and be the first to form a line of three through the centre node (E).
-The board forms an asterisk (∗) — every line of play passes through the centre.
+A two-player strategy board game. Move your three pieces along the network and be the first to form a line of three through the centre node (E). The board forms an asterisk (∗) — every winning line passes through the centre.
+
+---
+
+## How to play
+
+The board has 9 nodes in a 3×3 grid, all connected through the centre node E. Player 1 starts at the top (A, B, C), Player 2 at the bottom (G, H, I). On your turn, slide one piece to any adjacent connected node.
+
+**Win condition:** Form a line of three through centre node E. Valid win lines: A-E-I, C-E-G, B-E-H, D-E-F.
+
+**Rules:**
+- You cannot immediately move a piece back to the node it just came from (no-reversal rule)
+- If you have no legal moves, you lose immediately
+
+---
 
 ## Running locally
 
-No build step required — uses native ES modules.
-
 ```bash
-# Any static file server works, e.g.:
-npx serve .
-# or
-python3 -m http.server 8080
-```
-
-Then open `http://localhost:8080`.
-
-> Opening `index.html` directly via `file://` won't work because browsers
-> block ES module imports on the file protocol.
-
----
-
-## Project structure
-
-```
-asterisk-game/
-├── index.html                  # HTML shell — DOM structure only
-├── assets/
-│   └── style.css               # All visual styles
-└── src/
-    ├── main.js                 # Entry point — wires modules together
-    ├── game/
-    │   ├── constants.js        # Board geometry, adjacency, win lines
-    │   ├── logic.js            # Pure game logic (no DOM, no side effects)
-    │   └── controller.js       # Orchestrates state, AI, network → UI
-    ├── ai/
-    │   └── ai.js               # AI move selection (one-ply look-ahead)
-    ├── ui/
-    │   ├── renderer.js         # SVG board renderer + slide animations
-    │   ├── statusBar.js        # Status text / badge component
-    │   └── confetti.js         # Win celebration canvas effect
-    └── network/
-        └── network.js          # Network layer (v1 stub, v1.1 implementation)
-```
-
-### Module responsibilities
-
-| Module | Knows about | Does NOT know about |
-|---|---|---|
-| `constants.js` | Board data | Everything else |
-| `logic.js` | Constants | DOM, AI, network |
-| `ai.js` | logic.js, constants.js | DOM, network |
-| `network.js` | Nothing (stub) | Game logic |
-| `controller.js` | logic, ai, network | DOM |
-| `renderer.js` | SVG DOM, constants | Game logic |
-| `statusBar.js` | HTML DOM, constants | Game logic |
-| `confetti.js` | Canvas DOM | Game logic |
-| `main.js` | All modules, DOM IDs | Game logic internals |
-
----
-
-## Upgrading to v1.1 — Online multiplayer
-
-The codebase is structured so that **only `network.js` needs a real implementation**.
-Everything else is already wired up.
-
-### What to implement in `network.js`
-
-Replace the stub methods with a real backend. Recommended options:
-
-- **Firebase Realtime Database** — easiest, no server required
-- **Supabase** — open-source Firebase alternative
-- **Ably / Pusher** — if you want pure WebSocket channels
-
-```js
-// Example shape of a room document in Firestore:
-{
-  roomCode: "XKQZ",
-  players: { 1: "uid-abc", 2: "uid-xyz" },
-  state: { board: {...}, turn: 1, winner: null, winLine: null },
-  moves: [
-    { from: "A", to: "E", player: 1, timestamp: ... },
-  ]
-}
-```
-
-### Steps for v1.1
-
-1. **`network.js`** — implement `createRoom`, `joinRoom`, `sendMove`, `onMove`
-2. **`index.html`** — uncomment the `Online 1v1` button
-3. **`main.js`** — add a `setMode(GAME_MODE.ONLINE)` handler that calls
-   `network.createRoom()` or `network.joinRoom(code)` before resetting
-4. **Add a lobby UI** — a small screen to show/enter the room code
-   (a new `src/ui/lobby.js` component)
-
-The game controller already checks `network.isOnline()` before triggering
-the AI and already calls `network.sendMove()` after every move — so no
-changes are needed in `controller.js`, `logic.js`, or `renderer.js`.
-
-### Server-side move validation (recommended for v1.1)
-
-`logic.js` is side-effect free and has no browser dependencies — it can run
-in a Node.js Cloud Function unchanged. Deploy an `onWrite` trigger that calls
-`isLegalMove()` and `advanceState()` before committing moves to the database.
-
----
-
-## Roadmap
-
-| Version | Features |
-|---|---|
-| v1.0 | Local 2-player, vs AI, sliding pieces, confetti |
-| v1.1 | Online 1v1 with room codes |
-| v1.2 | Move history, replay |
-| v1.3 | Mobile app (React Native / Capacitor) |
-
----
-
-## v1.1 — Online multiplayer
-
-### Setup
-
-```bash
+git clone <repo>
+cd asterisk-game
 npm install
-cp .env.example .env
-# Fill in VITE_FIREBASE_API_KEY with your real key
+cp .env.example .env   # add your Firebase API key
 npm run dev
 ```
 
-### Firebase rules
+Open `http://localhost:5173`.
 
-Paste the contents of `firebase-rules.json` into your Firebase console under
-**Realtime Database → Rules** and publish.
 
-### Deploy to Vercel
-
-1. Push repo to GitHub (`.env` is gitignored — never committed)
-2. Import project in Vercel
-3. Add each `VITE_*` variable from `.env.example` under **Settings → Environment Variables**
-4. Deploy — Vercel runs `npm run build` automatically
-
-### New file structure (v1.1 additions)
+### Database structure
 
 ```
-asterisk-game/
-├── package.json              # Vite + Firebase deps
-├── vite.config.js            # Build config
-├── vercel.json               # Vercel deploy config
-├── firebase-rules.json       # Paste into Firebase console
-├── .env.example              # Shape of env vars (committed)
-├── .env                      # Real secrets (gitignored)
-├── .gitignore
-└── src/
-    ├── network/
-    │   └── network.js        # Full Firebase implementation (was stub)
-    └── ui/
-        ├── lobby.js          # Sign-in, create/join/matchmaking screens
-        └── leaderboard.js    # Top players overlay
+/users/{uid}
+  name, photoURL, createdAt
+  stats/
+    onlineWins, onlineLosses, gamesPlayed
+    easyWins, mediumWins, hardWins
+    fastestWin
+
+/rooms/{code}
+  status, mode, createdAt, lastActivity
+  players/ { 1: {uid, name}, 2: {uid, name} }
+  state/   { board, turn, winner, winLine, lastMove, moveCount }
+  playerLeft, rematch/
+
+/matchmaking/{uid}
+  uid, name, joinedAt, roomCode
 ```
 
-### Firebase data structure
+### Notes on Firebase rules
 
-```
-/users/{uid}          — profile + stats (wins, losses, fastestWin)
-/rooms/{code}         — room state, players, board state
-/matchmaking/{uid}    — queue entry (cleared once matched)
-```
+The leaderboard and leave-room notification both use the **Firebase REST API** (`fetch` with `?auth=token`) rather than the SDK. This bypasses a known issue where the Firebase SDK applies per-`$uid` rules when reading the `/users` collection under an authenticated session, causing only the signed-in user's own data to be returned instead of all users. Using the REST API reads as the collection-level rule which correctly returns all users.
 
 ---
 
-## Roadmap
+
+
+## Game modes
+
+| Mode | Description |
+|---|---|
+| 2P | Local two-player on the same device |
+| AI Easy | AI makes random moves with occasional blunders |
+| AI Medium | AI blocks threats and detects forks — no mistakes |
+| AI Hard | Minimax depth 4 with 15% mistake rate — beatable |
+| 1v1 Online | Real-time online match via Firebase (sign-in required) |
+
+**Online flow:** Quick Match pairs you with any waiting player. Create Room gives you a 4-letter code to share. Both players must be signed in with Google.
+
+---
+
+## Versions
 
 ### v1.0 — Local play ✓
-- 2-player local, vs AI (Easy / Medium / Hard)
-- No-reversal rule, forced-loss trap condition
-- Sliding piece animations, confetti celebration
+- 2-player local and vs AI (Easy / Medium / Hard)
+- No-reversal rule, forced-loss trap detection
+- Sliding piece animations, confetti win celebration
 - Sci-fi board UI
 
 ### v1.1 — Online multiplayer ✓
 - Google sign-in via Firebase Auth
-- Online 1v1: create room (shareable code) + quick match
+- Online 1v1: Create Room (shareable code) + Quick Match
 - Real-time game sync via Firebase Realtime Database
-- Leaderboard: online wins, W/L ratio, fastest win (fewest moves)
-- Disconnect detection — 30s timeout awards win to opponent
+- Disconnect detection — opponent notified, 5s auto-leave on clean exit, 30s win-award on abrupt disconnect
+- Rematch system — both players confirm via New Game button
+- Leaderboard: online wins, W/L ratio, fastest win in moves — updates in real-time
 - Deployed on Vercel
 
-### v2.0 — Badges + social
-**Badge system** — badges are stored in `/users/{uid}/badges[]` and
-displayed on the player's leaderboard row and future profile page.
+---
 
-#### Participation badges (games played)
+## Roadmap
+
+### v2.0 — Badges + social
+
+**Badge system** — stored in `/users/{uid}/badges[]`, displayed on leaderboard rows and profile pages.
+
+#### Participation (games played)
 | Badge | Condition |
 |---|---|
 | First move | Play 1 game |
@@ -200,14 +106,14 @@ displayed on the player's leaderboard row and future profile page.
 | Veteran | Play 75 games |
 | Century | Play 100 games |
 
-#### Win badges (online)
+#### Online wins
 | Badge | Condition |
 |---|---|
 | First blood | Win 1 online game |
 | On a roll | Win 10 online games |
 | Dominant | Win 50 online games |
 
-#### AI badges (one-time unlocks — beating each difficulty once)
+#### AI difficulty
 | Badge | Condition |
 |---|---|
 | Easy rider | Beat Easy AI once |
@@ -216,27 +122,25 @@ displayed on the player's leaderboard row and future profile page.
 | Persistent | Beat Hard AI 10 times |
 | Unbeatable? | Beat Very Hard AI (monthly event only) |
 
-#### Leaderboard display
-Badges show as small icons on the player's leaderboard row.
-Top 3 most prestigious badges shown (rest visible on profile page in v2.1).
-Badge icons are SVG — no external assets needed.
-
-**Implementation notes for v2:**
-- Add `badges: []` and `gamesPlayed: 0` to `/users/{uid}` in Firebase
-- `network.checkAndAwardBadges(result)` runs after every game end
-- Badge award logic is a pure function in `src/game/badges.js` — no Firebase reads, just compares stats to thresholds and returns newly earned badge IDs
+**Implementation notes:**
+- Add `badges: []` and `gamesPlayed: 0` to `/users/{uid}/stats` (already tracked as of v1.1)
+- Badge logic lives in `src/game/badges.js` — pure function, no Firebase reads, compares stats to thresholds and returns newly earned badge IDs
 - Badges are append-only — never removed once earned
+- `gamesPlayed` is already being written to Firebase as of v1.1
 
 #### Friend system (v2.1)
 - `/friendRequests/{uid}` — pending requests
 - `/friends/{uid}[]` — accepted friends list
-- Invite friend to private room directly from friend list
-- See friends' recent games and badge progress
+- Invite friend directly from friend list to a private room
 
-### v2.1 — Monthly Very Hard AI event
+### v2.1 — Very Hard AI monthly event
 - Server-side feature flag in Firebase Remote Config: `veryHardEnabled: bool`
-- Client reads flag on load — if true, shows "Very Hard" option below Hard
-- AI: full minimax depth 8 + 1-in-7 mistake rate (see `ai.js` constants)
-- No code deploy needed — toggle the flag in Firebase console
-- Badge: "Unbeatable?" awarded to anyone who beats it during the event window
+- Toggle in Firebase console — no code deploy needed
+- AI: full minimax depth 8 with 1-in-7 mistake rate
+- Badge: "Unbeatable?" — earnable only during the event window, permanently rare
 
+### v2.2 — Database migration
+- Move user stats and leaderboard to PostgreSQL or MongoDB
+- Firebase retained for Auth only (sign-in works well, keep it)
+- Eliminates the REST API workarounds currently needed for leaderboard reads
+- Enables richer queries: win streaks, head-to-head records, historical rankings
