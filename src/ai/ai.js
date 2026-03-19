@@ -63,7 +63,10 @@ export function getAIMove(board, lastMove, player, difficulty) {
 
   // 3 — strategic play per difficulty
   if (difficulty === AI_DIFFICULTY.MEDIUM) {
-    // Original AI behaviour: best heuristic, random tie-break, no mistakes
+    // Check if any opponent move creates a fork (2+ winning threats simultaneously)
+    // If yes, prioritise breaking it up before falling back to best heuristic
+    const forkBreaker = _findForkBreaker(board, lastMove, player, opp, moves);
+    if (forkBreaker) return forkBreaker;
     return _bestHeuristic(board, moves, player);
   }
 
@@ -78,6 +81,83 @@ export function getAIMove(board, lastMove, player, difficulty) {
   return difficulty === AI_DIFFICULTY.HARD
     ? _minimaxMove(board, lastMove, player)
     : _bestHeuristic(board, moves, player);
+}
+
+// ─── Fork detection (Medium) ───────────────────────────────────────
+
+/**
+ * Counts how many moves the given player has that would win immediately.
+ * This is the number of "threats" they hold on this board.
+ */
+function _countWinningThreats(board, lastMove, player) {
+  const moves = getAllLegalMoves(board, player, lastMove);
+  let threats = 0;
+  for (const m of moves) {
+    if (checkWin(applyMove(board, m.from, m.to))) threats++;
+  }
+  return threats;
+}
+
+/**
+ * Looks one move ahead for the opponent — if any opponent move would give
+ * them 2+ winning threats (a fork), find a move that either:
+ *   a) occupies the destination the fork depends on, or
+ *   b) reduces the opponent's threats to <2 after our move
+ *
+ * Returns the best such disrupting move, or null if no fork is coming.
+ */
+function _findForkBreaker(board, lastMove, player, opp, myMoves) {
+  const oppMoves = getAllLegalMoves(board, opp, lastMove);
+
+  // Find all opponent moves that create a fork
+  const forkDestinations = new Set();
+  for (const m of oppMoves) {
+    const nb      = applyMove(board, m.from, m.to);
+    const nlm     = { ...lastMove, [opp]: { from: m.from, to: m.to } };
+    const threats = _countWinningThreats(nb, nlm, opp);
+    if (threats >= 2) forkDestinations.add(m.to);
+  }
+
+  if (forkDestinations.size === 0) return null;
+
+  // Prefer moves that land on a fork destination (deny the square)
+  const denying = myMoves.filter(m => forkDestinations.has(m.to));
+  if (denying.length) {
+    // Among denying moves, pick the one with the best heuristic score
+    const scored = denying.map(m => ({
+      ...m,
+      score: _evaluate(applyMove(board, m.from, m.to), player),
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0];
+  }
+
+  // No square to deny — find a move that leaves opponent with <2 threats
+  // after our move (i.e. we've broken up the fork setup positionally)
+  const disrupting = myMoves.filter(m => {
+    const nb  = applyMove(board, m.from, m.to);
+    const nlm = { ...lastMove, [player]: { from: m.from, to: m.to } };
+    // Simulate opponent's best fork attempt after our move
+    const oppMovesNext = getAllLegalMoves(nb, opp, nlm);
+    for (const om of oppMovesNext) {
+      const nb2     = applyMove(nb, om.from, om.to);
+      const nlm2    = { ...nlm, [opp]: { from: om.from, to: om.to } };
+      const threats = _countWinningThreats(nb2, nlm2, opp);
+      if (threats >= 2) return false; // this move doesn't stop the fork
+    }
+    return true;
+  });
+
+  if (disrupting.length) {
+    const scored = disrupting.map(m => ({
+      ...m,
+      score: _evaluate(applyMove(board, m.from, m.to), player),
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0];
+  }
+
+  return null; // fork coming but we can't stop it — fall through to heuristic
 }
 
 // ─── Hard (minimax) ────────────────────────────────────────────────

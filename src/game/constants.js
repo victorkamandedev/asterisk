@@ -1,5 +1,5 @@
 /**
- * Nexus — Game Constants
+ * Asterisk — Game Constants
  * Central source of truth for board geometry, adjacency, and rules.
  * Nothing here changes between v1 and v1.1.
  */
@@ -71,9 +71,9 @@ export const INITIAL_BOARD = {
   G: CELL.P2,  H: CELL.P2,  I: CELL.P2,
 };
 
-/** Game modes — v1.1 adds ONLINE */
+/** Game modes */
 export const GAME_MODE = {
   TWO_PLAYER: '2p',
   VS_AI:      'ai',
-  ONLINE:     'online', // reserved for v1.1
+  ONLINE:     'online', // v1.1
 };

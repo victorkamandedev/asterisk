@@ -1,14 +1,5 @@
 /**
- * Asterisk — Game Controller
- *
- * Sits between game logic / AI / network and the UI renderer.
- * Owns the authoritative game state and exposes a clean API
- * that the UI layer calls — the UI never touches state directly.
- *
- * For v1.1 online mode:
- *   - handleNodeClick sends move via network.sendMove()
- *   - network.onMove() feeds remote moves back through processMove()
- *   - No other file needs to change
+ * Asterisk — Game Controller v1.1
  */
 
 import { GAME_MODE, PLAYERS } from '../game/constants.js';
@@ -27,15 +18,11 @@ export class GameController {
   constructor(onStateChange, onWin, onShakePiece) {
     this._onStateChange = onStateChange;
     this._onWin         = onWin;
-    this._onShakePiece  = onShakePiece; // renderer callback for shake animation
+    this._onShakePiece  = onShakePiece;
     this._mode          = GAME_MODE.TWO_PLAYER;
     this._difficulty    = AI_DIFFICULTY.EASY;
     this._state         = createInitialState();
     this._animating     = false;
-
-    network.onMove(({ from, to }) => {
-      if (network.isOnline()) this._processMove(from, to);
-    });
   }
 
   // ─── Public API ────────────────────────────────────────────────
@@ -46,45 +33,54 @@ export class GameController {
 
   setMode(mode) {
     this._mode = mode;
-    this.reset();
+    // Don't disconnect or reset if switching INTO online mode —
+    // the lobby has already set up the room. Reset only for local modes.
+    if (mode !== GAME_MODE.ONLINE) {
+      network.disconnect();
+      this._animating = false;
+      this._state     = createInitialState();
+      this._emit();
+    }
   }
 
   setDifficulty(diff) {
     this._difficulty = diff;
-    this.reset();
+    if (this._mode !== GAME_MODE.ONLINE) {
+      this._animating = false;
+      this._state     = createInitialState();
+      this._emit();
+    }
   }
 
   reset() {
+    if (this._mode === GAME_MODE.ONLINE) {
+      // In online mode reset just clears the board display — network handles state
+      this._animating = false;
+      this._state     = createInitialState();
+      this._emit();
+      return;
+    }
     network.disconnect();
     this._animating = false;
     this._state     = createInitialState();
     this._emit();
   }
 
-  /**
-   * Returns the legal destination nodes for a given piece in current state.
-   * Used by the renderer to highlight valid moves without exposing state internals.
-   */
   getLegalDestinations(nodeId) {
     const { board, turn, lastMove } = this._state;
     return getLegalDestinations(board, nodeId, lastMove, turn);
   }
 
-  /**
-   * Returns the single node that is banned by the no-reversal rule for the
-   * currently selected piece, or null if there is no ban.
-   * Used by the renderer to show the red "can't go back" ring.
-   */
   getBannedReversal(nodeId) {
     const { turn, lastMove } = this._state;
     const last = lastMove[turn];
     if (!last || last.to !== nodeId) return null;
-    return last.from; // this is the node they came from — banned destination
+    return last.from;
   }
 
   handleNodeClick(nodeId) {
-    if (this._animating)           return;
-    if (this._state.winner)        return;
+    if (this._animating)            return;
+    if (this._state.winner)         return;
     if (this._isWaitingForRemote()) return;
 
     const { board, turn, selected, lastMove } = this._state;
@@ -92,7 +88,6 @@ export class GameController {
 
     if (selected === null) {
       if (cell === turn) {
-        // Check if this piece has any legal moves at all — if not, shake it
         const destinations = getLegalDestinations(board, nodeId, lastMove, turn);
         if (destinations.length === 0) {
           if (this._onShakePiece) this._onShakePiece(nodeId);
@@ -107,7 +102,6 @@ export class GameController {
         this._emit();
         return;
       }
-
       if (isLegalMove(board, selected, nodeId, turn, lastMove)) {
         this._executeMove(selected, nodeId);
       } else if (cell === turn) {
@@ -115,6 +109,18 @@ export class GameController {
         this._emit();
       }
     }
+  }
+
+  /**
+   * Applies a full game state received from Firebase (opponent's move).
+   * The renderer detects the piece delta and animates the slide.
+   */
+  applyRemoteState(remoteState) {
+    if (this._animating) return;
+    this._animating = true;
+    this._state     = { ...remoteState, selected: null };
+    this._emit();
+    // onAnimationComplete() is called by renderer after slide finishes
   }
 
   onAnimationComplete() {
@@ -125,7 +131,8 @@ export class GameController {
       return;
     }
 
-    if (network.isOnline() && this._state.turn !== network.localPlayer) return;
+    // Online — if it's now our turn, just wait for player input
+    if (this._mode === GAME_MODE.ONLINE) return;
 
     if (this._mode === GAME_MODE.VS_AI && this._state.turn === PLAYERS.TWO) {
       this._scheduleAI();
@@ -137,20 +144,22 @@ export class GameController {
   _isWaitingForRemote() {
     return (
       (this._mode === GAME_MODE.VS_AI && this._state.turn === PLAYERS.TWO) ||
-      (network.isOnline() && this._state.turn !== network.localPlayer)
+      (this._mode === GAME_MODE.ONLINE && this._state.turn !== network.localPlayer)
     );
   }
 
   _executeMove(from, to) {
     this._animating = true;
-    this._state = advanceState(this._state, from, to);
-    if (network.isOnline()) network.sendMove(from, to);
-    this._emit();
-  }
+    this._state     = advanceState(this._state, from, to);
+    // Track move count for leaderboard fastest-win stat
+    this._state     = { ...this._state, moveCount: (this._state.moveCount || 0) + 1 };
 
-  _processMove(from, to) {
-    if (this._animating || this._state.winner) return;
-    this._executeMove(from, to);
+    // In online mode — push full state to Firebase so opponent receives it
+    if (this._mode === GAME_MODE.ONLINE) {
+      network.sendMove(from, to, this._state);
+    }
+
+    this._emit();
   }
 
   _scheduleAI() {
@@ -170,4 +179,5 @@ export class GameController {
     this._onStateChange({ ...this._state });
   }
 }
+
 

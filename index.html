@@ -6,70 +6,140 @@
   <title>Asterisk</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="src/style.css" />
 </head>
 <body>
 
-<div id="card">
-
-  <!-- Header -->
-  <div id="header">
-    <div class="header-corner left"></div>
-    <div id="title-wrap">
+<!-- ─── Welcome overlay (dismissible) ───────────────────────────── -->
+<div id="signin-overlay">
+  <div id="signin-panel">
+    <div id="signin-logo">
       <span class="title-dot"></span>
-      <h1 id="game-title">ASTERISK</h1>
+      <span id="signin-title">ASTERISK</span>
       <span class="title-dot"></span>
     </div>
-    <div class="header-corner right"></div>
+    <p id="signin-sub">A strategy game of three pieces and one centre node.<br>Form a line through the centre to win.</p>
+    <button class="signin-btn primary" id="btn-play-now">PLAY</button>
+    <p id="signin-incentive">Sign in beside the 1v1 button to track wins and appear on the leaderboard</p>
+  </div>
+</div>
+
+<!-- ─── Main layout: game + leaderboard ─────────────────────────── -->
+<div id="layout">
+
+  <!-- Game card -->
+  <div id="game-col">
+    <div id="card">
+
+      <!-- Header -->
+      <div id="header">
+        <div class="header-corner left"></div>
+        <div id="title-wrap">
+          <span class="title-dot"></span>
+          <h1 id="game-title">ASTERISK</h1>
+          <span class="title-dot"></span>
+        </div>
+        <div class="header-corner right"></div>
+      </div>
+
+      <!-- User bar — shown when signed in -->
+      <div id="user-bar" style="display:none">
+        <div id="user-bar-info">
+          <img id="user-avatar" src="" referrerpolicy="no-referrer" />
+          <span id="user-name"></span>
+        </div>
+        <button id="btn-signout">Sign out</button>
+      </div>
+
+      <!-- Online bar — shown during online game -->
+      <div id="online-bar" style="display:none">
+        <span id="online-room-label"></span>
+        <span id="online-opponent-label"></span>
+        <button id="btn-online-leave">Leave</button>
+      </div>
+
+      <!-- Disconnect notice — shown prominently above the board -->
+      <div id="disconnect-notice" style="display:none">
+        <span id="disconnect-msg">Opponent disconnected — awarding win in</span>
+        <span id="disconnect-timer"></span>
+        <button id="btn-disconnect-ok" onclick="document.getElementById('btn-online-leave').click()" style="font-family:var(--font-head);font-size:9px;padding:3px 8px;border-radius:4px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:var(--muted);cursor:pointer;margin-left:6px">OK</button>
+      </div>
+
+      <!-- Player panels -->
+      <div id="player-panels">
+
+        <div class="player-panel" id="panel-p1">
+          <div class="panel-label" id="p1-label">PLAYER 1</div>
+          <div class="panel-orb p1-orb">
+            <span class="orb-count">1</span>
+          </div>
+        </div>
+
+        <!-- Mode switcher — 1v1 + sign-in on top, then 2P, AI, diff below -->
+        <div id="mode-row">
+          <div id="mode-top-row">
+            <button id="btn-online-mode">1v1</button>
+          </div>
+          <button id="btn-2p" class="active">2P</button>
+          <button id="btn-ai">AI</button>
+          <div id="diff-row" style="display:none">
+            <button id="btn-easy" class="active diff-btn">EASY</button>
+            <button id="btn-med"  class="diff-btn">MED</button>
+            <button id="btn-hard" class="diff-btn">HARD</button>
+          </div>
+        </div>
+
+        <div class="player-panel right" id="panel-p2">
+          <div class="panel-label" id="p2-label">PLAYER 2</div>
+          <div class="panel-orb p2-orb">
+            <span class="orb-count">2</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Board -->
+      <div id="board-wrap">
+        <svg id="board" width="100%" viewBox="0 0 340 340" preserveAspectRatio="xMidYMid meet"></svg>
+        <canvas id="confetti-canvas"></canvas>
+      </div>
+
+      <!-- Status bar -->
+      <div id="status-bar">
+        <span class="status-dash">·</span>
+        <span id="status-text">PLAYER 1'S TURN</span>
+        <span class="status-dash">·</span>
+      </div>
+
+      <!-- Buttons -->
+      <div id="btn-row">
+        <button id="btn-new-game">NEW GAME</button>
+      </div>
+
+    </div>
   </div>
 
-  <!-- Player panels -->
-  <div id="player-panels">
-    <div class="player-panel" id="panel-p1">
-      <div class="panel-label">PLAYER 1</div>
-      <div class="panel-orb p1-orb">
-        <span class="orb-count" id="p1-count">1</span>
+  <!-- Leaderboard column -->
+  <div id="lb-col">
+    <div id="lb-panel-inline">
+      <div class="lb-header">
+        <span class="lb-title">LEADERBOARD</span>
+        <button id="lb-refresh" title="Refresh">↻</button>
+      </div>
+      <div id="lb-inline-body">
+        <p class="lb-empty" style="padding:1.5rem;text-align:center;opacity:0.4">Press ↻ to load rankings</p>
+      </div>
+      <!-- Nudge lives OUTSIDE lb-inline-body so innerHTML rewrites never detach it -->
+      <div id="lb-signin-nudge" style="display:none">
+        <button id="btn-lb-signin">Sign in to appear here →</button>
       </div>
     </div>
-
-    <!-- Mode switcher in centre -->
-    <div id="mode-row">
-      <button id="btn-2p" class="active">2P</button>
-      <button id="btn-ai">AI</button>
-      <div id="diff-row" style="display:none">
-        <button id="btn-easy" class="active diff-btn">EASY</button>
-        <button id="btn-med" class="diff-btn">MED</button>
-        <button id="btn-hard" class="diff-btn">HARD</button>
-      </div>
-    </div>
-
-    <div class="player-panel right" id="panel-p2">
-      <div class="panel-label" id="p2-label">PLAYER 2</div>
-      <div class="panel-orb p2-orb">
-        <span class="orb-count" id="p2-count">2</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Board -->
-  <div id="board-wrap">
-    <svg id="board" width="100%" viewBox="0 0 340 340" preserveAspectRatio="xMidYMid meet"></svg>
-    <canvas id="confetti-canvas"></canvas>
-  </div>
-
-  <!-- Status bar -->
-  <div id="status-bar">
-    <span class="status-dash">·</span>
-    <span id="status-text">PLAYER 1'S TURN</span>
-    <span class="status-dash">·</span>
-  </div>
-
-  <!-- New game -->
-  <div id="btn-row">
-    <button id="btn-new-game">NEW GAME</button>
   </div>
 
 </div>
+
+<!-- ─── Online lobby overlay ─────────────────────────────────────── -->
+<div id="lobby" style="display:none"></div>
 
 <script type="module" src="src/main.js"></script>
 </body>

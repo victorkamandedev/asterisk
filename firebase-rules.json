@@ -1,0 +1,38 @@
+{
+  "rules": {
+
+    "users": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "rooms": {
+      "$roomCode": {
+        ".read": "auth != null",
+        ".write": "auth != null && (
+          !data.exists() ||
+          data.child('players/1/uid').val() === auth.uid ||
+          data.child('players/2/uid').val() === auth.uid ||
+          (data.child('status').val() === 'waiting' && !data.child('players/2').exists())
+        )",
+
+        "playerLeft": {
+          ".write": "auth != null && (
+            data.parent().child('players/1/uid').val() === auth.uid ||
+            data.parent().child('players/2/uid').val() === auth.uid
+          )"
+        }
+      }
+    },
+
+    "matchmaking": {
+      ".read":  "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+
+  }
+}

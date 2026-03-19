@@ -1,5 +1,5 @@
 /**
- * Nexus — Confetti Celebration
+ * Asterisk — Confetti Celebration
  * Canvas-based particle burst. Self-contained, no external deps.
  * Call play(winner) to trigger; stop() to cancel early.
  */

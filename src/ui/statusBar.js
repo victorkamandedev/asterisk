@@ -1,5 +1,5 @@
 /**
- * Nexus — Status Bar
+ * Asterisk — Status Bar
  * Updates the status text and player orb highlights based on game state.
  */
 

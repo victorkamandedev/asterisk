@@ -1,5 +1,5 @@
 /**
- * Nexus — Core Game Logic
+ * Asterisk — Core Game Logic
  * Pure functions only. No DOM, no side effects.
  * Safe to run server-side for v1.1 online validation.
  *
