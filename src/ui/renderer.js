@@ -1,5 +1,5 @@
 /**
- * Asterisk — Board Renderer
+ * Asterisk — Board Renderer v1.2
  *
  * Owns all SVG DOM manipulation. Receives state snapshots and diffs
  * them onto the board.
@@ -7,21 +7,23 @@
  * ANIMATION NOTE: CSS transitions on SVG presentation attributes (cx/cy)
  * are unreliable cross-browser. We use JS requestAnimationFrame instead,
  * lerping the piece position each frame until it reaches the destination.
+ *
+ * v1.2: Drag-to-move support via DragHandler. The drag system is a parallel
+ * input path — click interaction is fully preserved.
  */
 
 import { NODE_POSITIONS, EDGES } from '../game/constants.js';
+import { DragHandler }           from './drag.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 
 // Board geometry
 const BOARD_PAD   = 50;   // padding inside 340×340 viewBox
 const BOARD_SIZE  = 240;  // usable area
-const STEP        = BOARD_SIZE / 2;
 
 // Derived node positions scaled to viewBox
 const NP = {};
 Object.entries(NODE_POSITIONS).forEach(([id, {x, y}]) => {
-  // original coords are 0-260 range; remap to our board area
   NP[id] = {
     x: BOARD_PAD + (x / 260) * BOARD_SIZE,
     y: BOARD_PAD + (y / 260) * BOARD_SIZE,
@@ -43,9 +45,16 @@ export class BoardRenderer {
     this._piecePos   = {};   // nodeId → { x, y }  current animated position
     this._anims      = [];   // active slide animations
     this._built      = false;
+    this._drag       = null; // DragHandler instance
   }
 
   build(state) {
+    // Destroy previous drag handler before clearing the SVG
+    if (this._drag) {
+      this._drag.destroy();
+      this._drag = null;
+    }
+
     this._svg.innerHTML = '';
     this._pieceEls = {};
     this._piecePos = {};
@@ -57,7 +66,7 @@ export class BoardRenderer {
     this._buildSockets();
     this._buildPieces(state);
     this._buildLabels();
-    this._buildHitTargets();
+    this._buildHitTargets(); // also instantiates DragHandler
   }
 
   update(prev, next) {
@@ -72,21 +81,18 @@ export class BoardRenderer {
   _buildDefs() {
     const defs = this._make('defs');
 
-    // P1 radial gradient
     const g1 = this._make('radialGradient');
     this._attrs(g1, { id: 'grad-p1', cx: '35%', cy: '35%', r: '65%' });
     g1.appendChild(this._stop('0%',   '#60c8ff'));
     g1.appendChild(this._stop('100%', '#0055aa'));
     defs.appendChild(g1);
 
-    // P2 radial gradient
     const g2 = this._make('radialGradient');
     this._attrs(g2, { id: 'grad-p2', cx: '35%', cy: '35%', r: '65%' });
     g2.appendChild(this._stop('0%',   '#ffb060'));
     g2.appendChild(this._stop('100%', '#aa3300'));
     defs.appendChild(g2);
 
-    // Centre glow gradient
     const gc = this._make('radialGradient');
     this._attrs(gc, { id: 'grad-center', cx: '50%', cy: '50%', r: '50%' });
     gc.appendChild(this._stop('0%',   'rgba(150,220,255,0.25)'));
@@ -131,7 +137,6 @@ export class BoardRenderer {
       this._attrs(el, { id: `socket-${id}`, cx: pos.x, cy: pos.y, r, class: cls });
       g.appendChild(el);
 
-      // Centre ambient glow
       if (id === 'E') {
         const glow = this._make('circle');
         this._attrs(glow, { cx: pos.x, cy: pos.y, r: 40, fill: 'url(#grad-center)', 'pointer-events': 'none' });
@@ -162,7 +167,6 @@ export class BoardRenderer {
     group.setAttribute('class', 'piece');
     group.setAttribute('id', `piece-${id}`);
 
-    // Outer glow ring
     const outer = this._make('circle');
     this._attrs(outer, {
       cx: x, cy: y, r: R_PIECE + 3,
@@ -172,7 +176,6 @@ export class BoardRenderer {
       opacity: '0.6',
     });
 
-    // Filled orb
     const inner = this._make('circle');
     this._attrs(inner, {
       cx: x, cy: y, r: R_PIECE,
@@ -206,13 +209,68 @@ export class BoardRenderer {
   _buildHitTargets() {
     const g = this._make('g');
     g.setAttribute('id', 'hit-layer');
+
+    // Instantiate drag handler — callbacks give it live access to piece state
+    this._drag = new DragHandler(
+      this._svg,
+      this._ctrl,
+      NP,
+      () => this._pieceEls,
+      () => this._piecePos,
+      // showDragHighlights: called on drag commit, mirrors click-select visual
+      (fromNodeId) => this._applyDragHighlights(fromNodeId),
+      // clearDragHighlights: called on release/cancel
+      () => this._clearDragHighlights(),
+    );
+
     Object.entries(NP).forEach(([id, pos]) => {
       const el = this._make('circle');
       this._attrs(el, { cx: pos.x, cy: pos.y, r: R_HIT, class: 'node-hit' });
+
+      // Click handler — unchanged
       el.addEventListener('click', () => this._ctrl.handleNodeClick(id));
+
+      // Drag handler — attach per node
+      this._drag.attach(el, id);
+
       g.appendChild(el);
     });
+
     this._svg.appendChild(g);
+  }
+
+  // ─── Drag highlight helpers ───────────────────────────────────────
+
+  /**
+   * Applies valid/banned socket rings for a drag in progress.
+   * Mirrors the visual produced by _updateSockets when a piece is click-selected,
+   * but without touching controller state (no selected node is set).
+   */
+  _applyDragHighlights(fromNodeId) {
+    const valid  = this._ctrl.getLegalDestinations(fromNodeId);
+    const banned = this._ctrl.getBannedReversal(fromNodeId);
+
+    Object.keys(NP).forEach(id => {
+      const el = document.getElementById(`socket-${id}`);
+      if (!el) return;
+      if (valid.includes(id))  el.setAttribute('class', 'node-valid-ring');
+      else if (id === banned)  el.setAttribute('class', 'node-banned-ring');
+      else                     el.setAttribute('class', id === 'E' ? 'node-socket-center' : 'node-socket');
+    });
+  }
+
+  /**
+   * Restores all sockets to their default (non-highlighted) state.
+   * Called when a drag ends for any reason.
+   * The next _updateSockets call from the controller will override this
+   * if there's a click-selected piece, keeping state consistent.
+   */
+  _clearDragHighlights() {
+    Object.keys(NP).forEach(id => {
+      const el = document.getElementById(`socket-${id}`);
+      if (!el) return;
+      el.setAttribute('class', id === 'E' ? 'node-socket-center' : 'node-socket');
+    });
   }
 
   // ─── Update ──────────────────────────────────────────────────────
@@ -227,7 +285,6 @@ export class BoardRenderer {
 
       if (isWin) { el.setAttribute('class', 'edge-win'); return; }
 
-      // Colour edge if both ends are owned by same player
       const ca = state.board[a], cb = state.board[b];
       if (ca && cb && ca === cb) {
         el.setAttribute('class', ca === 1 ? 'edge-p1' : 'edge-p2');
@@ -254,13 +311,12 @@ export class BoardRenderer {
       const isBanned = id === banned;
       const isCenter = id === 'E';
 
-      if (isWin)        el.setAttribute('class', 'node-win-ring');
-      else if (isValid) el.setAttribute('class', 'node-valid-ring');
+      if (isWin)         el.setAttribute('class', 'node-win-ring');
+      else if (isValid)  el.setAttribute('class', 'node-valid-ring');
       else if (isBanned) el.setAttribute('class', 'node-banned-ring');
-      else              el.setAttribute('class', isCenter ? 'node-socket-center' : 'node-socket');
+      else               el.setAttribute('class', isCenter ? 'node-socket-center' : 'node-socket');
     });
 
-    // Update piece ring colours (selected = gold)
     Object.entries(this._pieceEls).forEach(([id, els]) => {
       const isSel = state.selected === id;
       const isWin = state.winLine && state.winLine.includes(id);
@@ -287,7 +343,6 @@ export class BoardRenderer {
 
   /**
    * Shakes a piece's SVG group to signal it has no legal moves.
-   * Pure JS animation — no CSS class needed on the piece itself.
    * @param {string} nodeId
    */
   shakePiece(nodeId) {
@@ -301,7 +356,6 @@ export class BoardRenderer {
 
     const tick = () => {
       if (i >= SHAKE.length) {
-        // Restore exact position
         this._setPiecePos(els, pos.x, pos.y);
         return;
       }
@@ -321,7 +375,6 @@ export class BoardRenderer {
   }
 
   _updatePieces(prev, next) {
-    // Detect moved piece
     const fromId = Object.keys(prev.board).find(
       k => prev.board[k] !== 0 && next.board[k] === 0
     );
@@ -349,7 +402,11 @@ export class BoardRenderer {
     delete this._piecePos[fromId];
     this._piecePos[toId] = { x: startX, y: startY };
 
-    // Cancel any existing anim for this piece
+    // Restore opacity in case this piece was being dragged when the move fired
+    // (drag succeeded — ghost was removed, real piece may still be dimmed)
+    els.outer.setAttribute('opacity', '0.6');
+    els.inner.setAttribute('opacity', '1');
+
     this._anims = this._anims.filter(a => a.els !== els);
 
     const startTime = performance.now();
@@ -357,10 +414,10 @@ export class BoardRenderer {
     this._anims.push(anim);
 
     const tick = (now) => {
-      const t  = Math.min((now - startTime) / SLIDE_DURATION, 1);
-      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t; // ease-in-out quad
-      const cx = startX + (endX - startX) * ease;
-      const cy = startY + (endY - startY) * ease;
+      const t    = Math.min((now - startTime) / SLIDE_DURATION, 1);
+      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      const cx   = startX + (endX - startX) * ease;
+      const cy   = startY + (endY - startY) * ease;
 
       this._setPiecePos(els, cx, cy);
       this._piecePos[toId] = { x: cx, y: cy };
@@ -395,4 +452,3 @@ export class BoardRenderer {
     Object.entries(map).forEach(([k, v]) => el.setAttribute(k, v));
   }
 }
-

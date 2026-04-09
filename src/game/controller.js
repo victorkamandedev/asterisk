@@ -1,5 +1,5 @@
 /**
- * Asterisk — Game Controller v1.1
+ * Asterisk — Game Controller v1.2
  */
 
 import { GAME_MODE, PLAYERS } from '../game/constants.js';
@@ -33,8 +33,6 @@ export class GameController {
 
   setMode(mode) {
     this._mode = mode;
-    // Don't disconnect or reset if switching INTO online mode —
-    // the lobby has already set up the room. Reset only for local modes.
     if (mode !== GAME_MODE.ONLINE) {
       network.disconnect();
       this._animating = false;
@@ -54,7 +52,6 @@ export class GameController {
 
   reset() {
     if (this._mode === GAME_MODE.ONLINE) {
-      // In online mode reset just clears the board display — network handles state
       this._animating = false;
       this._state     = createInitialState();
       this._emit();
@@ -112,15 +109,77 @@ export class GameController {
   }
 
   /**
+   * Called by the drag system when a piece is released over a node.
+   *
+   * Returns one of three outcomes the drag handler acts on:
+   *   'move'   — legal drop, move executed, animate via normal pipeline
+   *   'shake'  — illegal destination, shake already fired, snap back
+   *   'cancel' — silent snap back (origin, off-board, wrong player, etc.)
+   *
+   * Clears any click-based selection before executing so no stale ring remains.
+   *
+   * @param {string}      from — node the drag started on
+   * @param {string|null} to   — node released over (null = off-board)
+   * @returns {'move'|'shake'|'cancel'}
+   */
+  handleDrop(from, to) {
+    if (this._animating)            return 'cancel';
+    if (this._state.winner)         return 'cancel';
+    if (this._isWaitingForRemote()) return 'cancel';
+
+    const { board, turn, lastMove } = this._state;
+
+    // Piece doesn't belong to current player
+    if (board[from] !== turn) return 'cancel';
+
+    // Released with no target or back on origin
+    if (!to || to === from) return 'cancel';
+
+    // Legal move — execute
+    if (isLegalMove(board, from, to, turn, lastMove)) {
+      // Clear any click selection before executing
+      this._state = { ...this._state, selected: null };
+      this._executeMove(from, to);
+      return 'move';
+    }
+
+    // Illegal destination — shake the dragged piece
+    if (this._onShakePiece) this._onShakePiece(from);
+    return 'shake';
+  }
+
+  /**
+   * Called by the drag system on pointerdown.
+   * Returns false (and fires shake) if the piece has zero legal moves,
+   * so the player gets instant feedback before the drag starts.
+   *
+   * @param {string} nodeId
+   * @returns {boolean}
+   */
+  canDragFrom(nodeId) {
+    if (this._animating)            return false;
+    if (this._state.winner)         return false;
+    if (this._isWaitingForRemote()) return false;
+
+    const { board, turn, lastMove } = this._state;
+    if (board[nodeId] !== turn) return false;
+
+    const destinations = getLegalDestinations(board, nodeId, lastMove, turn);
+    if (destinations.length === 0) {
+      if (this._onShakePiece) this._onShakePiece(nodeId);
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * Applies a full game state received from Firebase (opponent's move).
-   * The renderer detects the piece delta and animates the slide.
    */
   applyRemoteState(remoteState) {
     if (this._animating) return;
     this._animating = true;
     this._state     = { ...remoteState, selected: null };
     this._emit();
-    // onAnimationComplete() is called by renderer after slide finishes
   }
 
   onAnimationComplete() {
@@ -131,7 +190,6 @@ export class GameController {
       return;
     }
 
-    // Online — if it's now our turn, just wait for player input
     if (this._mode === GAME_MODE.ONLINE) return;
 
     if (this._mode === GAME_MODE.VS_AI && this._state.turn === PLAYERS.TWO) {
@@ -151,10 +209,8 @@ export class GameController {
   _executeMove(from, to) {
     this._animating = true;
     this._state     = advanceState(this._state, from, to);
-    // Track move count for leaderboard fastest-win stat
     this._state     = { ...this._state, moveCount: (this._state.moveCount || 0) + 1 };
 
-    // In online mode — push full state to Firebase so opponent receives it
     if (this._mode === GAME_MODE.ONLINE) {
       network.sendMove(from, to, this._state);
     }
@@ -179,5 +235,3 @@ export class GameController {
     this._onStateChange({ ...this._state });
   }
 }
-
-

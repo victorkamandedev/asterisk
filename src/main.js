@@ -284,7 +284,8 @@ function showDisconnectNotice(opponentLeft = false) {
     ? 'Opponent left — returning to menu in'
     : 'Opponent disconnected — awarding win in';
 
-  // Both cases: count down and auto-leave — room is dead either way
+  // Clean leave: 5s countdown, no win recorded (opponent forfeited, we win).
+  // Abrupt disconnect: 30s countdown to confirm the drop before awarding win.
   let secs = opponentLeft ? 5 : 30;
   disconnectTimerEl.textContent = `${secs}s`;
 
@@ -293,9 +294,11 @@ function showDisconnectNotice(opponentLeft = false) {
     disconnectTimerEl.textContent = `${secs}s`;
     if (secs <= 0) {
       clearInterval(disconnectInterval);
-      if (!opponentLeft) {
-        // Abrupt disconnect — record win before leaving
-        await network.recordOnlineResult(true, 0);
+      // Award win to the player who stayed — covers both clean leave and
+      // abrupt disconnect. recordOnlineResult is NOT called anywhere else
+      // for these scenarios (handleDisconnectResult only closes the room).
+      if (network.isSignedIn() && !controller.state.winner) {
+        await network.recordOnlineResult(true, controller.state.moveCount || 0);
       }
       leaveOnlineGame(true); // true = already notified, skip notifyLeave
     }
@@ -309,6 +312,13 @@ async function leaveOnlineGame(skipNotify = false) {
       await network.notifyLeave();
     } catch (e) {
       // best effort
+    }
+    // Record a loss for the player who voluntarily left mid-game.
+    // We only do this on a clean leave (skipNotify=false), never when we are
+    // the staying player being auto-ejected after the opponent left/disconnected
+    // (in that case skipNotify=true and we already recorded our win above).
+    if (network.isSignedIn() && !controller.state.winner) {
+      try { await network.recordOnlineResult(false, 0); } catch (e) { /* best effort */ }
     }
   }
 

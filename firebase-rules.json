@@ -28,9 +28,12 @@
     },
 
     "matchmaking": {
-      ".read":  "auth != null",
+      ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && auth.uid === $uid"
+        ".write": "auth != null && (
+          auth.uid === $uid ||
+          (data.child('roomCode').val() === null && newData.child('roomCode').val() !== null)
+        )"
       }
     }
 

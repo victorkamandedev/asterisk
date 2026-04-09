@@ -102,16 +102,23 @@ export class Lobby {
 
     // Listen for opponent joining — use onRoomChange (not onRoomStateChange)
     // which fires on all room document changes including players joining
+    let gameStarting = false; // guard against the callback firing multiple times
     network.startListening();
     network.onRoomChange(room => {
-      if (room.players?.[2]) {
-        // Clear the room callback so it doesn't fire again during game
+      if (room.players?.[2] && !gameStarting) {
+        gameStarting = true;
+        // Clear the room callback so it doesn't fire again during the game
         network.onRoomChange(null);
         const { createInitialState } = window._asteriskLogic;
-        // Player 1 writes initial state then starts the game
+        // Player 1 writes initial state, then both players enter the game.
+        // initGameState must resolve before we hand off so Player 2's
+        // onRoomStateChange fires with a real state, not null.
         network.initGameState(createInitialState()).then(() => {
           this.hide();
           this._onGameStart(code, 1);
+        }).catch(e => {
+          gameStarting = false;
+          this._showError('Failed to start game: ' + e.message);
         });
       }
     });
@@ -141,9 +148,28 @@ export class Lobby {
       if (code.length !== 4) { this._showInlineError(errorEl, 'Code must be 4 letters'); return; }
       try {
         await network.joinRoom(code);
-        network.startListening();  // start listening before handing off
-        this.hide();
-        this._onGameStart(code, 2);
+
+        // Show a brief waiting screen while Player 1 writes initial state.
+        // Player 2 must NOT enter the game until room.state exists — otherwise
+        // they land in the game with null state and get stuck while P1 is still
+        // on the waiting screen writing the initial state (the race condition).
+        this._render(`
+          <div class="lobby-screen">
+            <p class="lobby-sub">Joining room…</p>
+            <div class="lobby-spinner"></div>
+          </div>
+        `);
+
+        let gameStarting = false;
+        network.startListening();
+        network.onRoomChange(room => {
+          if (room.state && !gameStarting) {
+            gameStarting = true;
+            network.onRoomChange(null);
+            this.hide();
+            this._onGameStart(code, 2);
+          }
+        });
       } catch (e) {
         this._showInlineError(errorEl, e.message);
       }
@@ -181,16 +207,26 @@ export class Lobby {
       (code, player) => {
         network.startListening();
         if (player === 1) {
+          // Player 1 writes initial state, then enters the game
           const { createInitialState } = window._asteriskLogic;
           network.initGameState(createInitialState()).then(() => {
             clearInterval(dotTimer);
             this.hide();
             this._onGameStart(code, player);
-          });
+          }).catch(e => { clearInterval(dotTimer); this._showError(e.message); });
         } else {
-          clearInterval(dotTimer);
-          this.hide();
-          this._onGameStart(code, player);
+          // Player 2 must wait for Player 1 to write initial state before
+          // entering — same race condition as the join-room flow.
+          let gameStarting = false;
+          network.onRoomChange(room => {
+            if (room.state && !gameStarting) {
+              gameStarting = true;
+              network.onRoomChange(null);
+              clearInterval(dotTimer);
+              this.hide();
+              this._onGameStart(code, player);
+            }
+          });
         }
       },
       () => {

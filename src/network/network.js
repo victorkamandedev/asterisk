@@ -258,21 +258,19 @@ class NetworkService {
 
   startListening() {
     if (!this._roomCode) return;
-    let gameStarted   = false; // don't fire disconnect until game is active
-    let disconnectFired = false; // only fire disconnect once
+    let disconnectFired = false; // only fire disconnect/leave callback once
 
     const unsub = onValue(ref(db, `rooms/${this._roomCode}`), snap => {
       if (!snap.exists()) return;
       const room = snap.val();
 
       // Room-level callback — lobby uses this to detect player 2 joining
+      // and Player 2 waits for initial state before entering game
       if (this._roomCallback) this._roomCallback(room);
 
-      // Game is active once state exists
-      if (room.state) gameStarted = true;
-
-      // Only fire disconnect/leave once after game has started
-      if (gameStarted && !disconnectFired && this._disconnectCallback) {
+      // Disconnect / leave — fire as soon as we see it, regardless of whether
+      // game state has been written yet (covers the lobby hand-off window too).
+      if (!disconnectFired && this._disconnectCallback) {
         if (room.playerLeft && room.playerLeft !== this._localPlayer) {
           disconnectFired = true;
           this._disconnectCallback('left');
@@ -370,11 +368,17 @@ class NetworkService {
   async handleDisconnectResult(opponentDisconnected) {
     if (!this._roomCode || !this._user) return;
     clearTimeout(this._disconnectTimer);
+    // Win recording is handled exclusively in main.js showDisconnectNotice so
+    // there is exactly one place that calls recordOnlineResult per disconnect.
+    // This method just marks the room finished so it is inert for both players.
     if (opponentDisconnected) {
+      const code = this._roomCode; // capture before disconnect() nulls it
       this._disconnectTimer = setTimeout(async () => {
-        await this.recordOnlineResult(true, 0);
-        await update(ref(db, `rooms/${this._roomCode}`), { status: 'finished' });
-        await this.disconnect();
+        try {
+          await update(ref(db, `rooms/${code}`), { status: 'finished' });
+        } catch (e) {
+          // best effort — room may already be gone
+        }
       }, DISCONNECT_TIMEOUT_MS);
     }
   }
